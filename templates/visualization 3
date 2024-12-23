@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Tourists vs GDP Growth Rate</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        .bar { fill: steelblue; }
+        .axis-label { font-size: 14px; font-weight: bold; }
+        .tooltip { 
+            position: absolute;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            padding: 5px;
+            border-radius: 3px;
+            pointer-events: none;
+            font-size: 12px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .selector-container, .slider-container {
+            margin: 20px;
+            text-align: center;
+        }
+        select {
+            width: 300px;
+            height: 120px;
+        }
+        .y-axis-right .domain, .y-axis-right .tick line {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="selector-container">
+        <label for="countrySelector">Select up to 5 Countries:</label>
+        <select id="countrySelector" multiple></select>
+    </div>
+    <div class="slider-container">
+        <label for="yearSlider">Select Year:</label>
+        <input id="yearSlider" type="range" min="2015" max="2020" step="1" value="2020">
+        <span id="selectedYear">2020</span>
+    </div>
+    <script>
+        const margin = { top: 50, right: 80, bottom: 100, left: 80 };
+        const width = 800 - margin.left - margin.right;
+        const height = 500 - margin.top - margin.bottom;
+
+        const svg = d3.select("body")
+            .append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform", `translate(${margin.left},${margin.top})`);
+
+        const x0 = d3.scaleBand().range([0, width]).padding(0.2);
+        const x1 = d3.scaleBand().padding(0.05);
+        const y = d3.scaleLinear().range([height, 0]);
+        const yRight = d3.scaleLinear().range([height, 0]);
+
+        const color = d3.scaleOrdinal()
+            .domain(["Tourists", "GDP Growth Rate"])
+            .range(["steelblue", "orange"]);
+
+        const xAxisGroup = svg.append("g")
+            .attr("transform", `translate(0,${height})`);
+        const yAxisGroup = svg.append("g");
+        const yRightAxisGroup = svg.append("g")
+            .attr("transform", `translate(${width},0)`)
+            .attr("class", "y-axis-right");
+
+        svg.append("text")
+            .attr("class", "axis-label")
+            .attr("x", width / 2)
+            .attr("y", height + margin.bottom - 40)
+            .attr("text-anchor", "middle")
+            .text("Countries");
+
+        svg.append("text")
+            .attr("class", "axis-label")
+            .attr("transform", "rotate(-90)")
+            .attr("x", -height / 2)
+            .attr("y", -50)
+            .attr("text-anchor", "middle")
+            .text("Tourists");
+
+        svg.append("text")
+            .attr("class", "axis-label")
+            .attr("transform", "rotate(-90)")
+            .attr("x", -height / 2)
+            .attr("y", width + 50)
+            .attr("text-anchor", "middle")
+            .text("GDP Growth Rate (%)");
+
+        const tooltip = d3.select("body")
+            .append("div")
+            .attr("class", "tooltip");
+
+        const yearSlider = d3.select("#yearSlider");
+        const selectedYearText = d3.select("#selectedYear");
+        const countrySelector = d3.select("#countrySelector");
+
+        async function loadData() {
+            const gdpData = await d3.csv("GDP.csv");
+            const tourismData = await d3.csv("tourism.csv");
+
+            const countryList = Array.from(new Set(gdpData.map(d => d["Country Name"])));
+            countryList.sort();
+
+            countrySelector.selectAll("option")
+                .data(countryList)
+                .enter()
+                .append("option")
+                .text(d => d);
+
+            return { gdpData, tourismData };
+        }
+
+        function filterData({ gdpData, tourismData }, selectedCountries, year) {
+            const selectedCountriesLower = selectedCountries.map(c => c.toLowerCase());
+
+            const gdpForYear = gdpData
+                .filter(d => d["Country Name"] && d[year] && d[year - 1])
+                .map(d => ({
+                    country: d["Country Name"].trim().toLowerCase(),
+                    gdp: +d[year],
+                    gdpPrev: +d[year - 1],
+                }))
+                .filter(d => selectedCountriesLower.includes(d.country));
+
+            const tourismForYear = tourismData
+                .filter(d => d["Entity"] && d["Year"] && +d.Year === +year)
+                .map(d => ({
+                    country: d["Entity"].trim().toLowerCase(),
+                    tourists: parseFloat(d["Tourists"].replace(/,/g, "")) || 0,
+                }));
+
+            // Merge data and ensure all selected countries are included
+            const mergedData = selectedCountries.map(country => {
+                const lowerCountry = country.toLowerCase();
+                const gdp = gdpForYear.find(d => d.country === lowerCountry) || { gdp: null, gdpPrev: null };
+                const tourism = tourismForYear.find(d => d.country === lowerCountry) || { tourists: null };
+
+                return {
+                    country: country, // Use the original case for display
+                    tourists: tourism.tourists ?? null,
+                    gdpGrowthRate: gdp.gdp !== null && gdp.gdpPrev !== null 
+                        ? ((gdp.gdp - gdp.gdpPrev) / gdp.gdpPrev) * 100 
+                        : null,
+                };
+            });
+
+            return mergedData;
+        }
+
+        function updateChart(data) {
+            // Ensure all selected countries appear on the x-axis
+            x0.domain(data.map(d => d.country));
+            x1.domain(["Tourists", "GDP Growth Rate"]).range([0, x0.bandwidth()]);
+
+            // Adjust y-axis scales to fit the data
+            y.domain([0, d3.max(data, d => (d.tourists || 0)) * 1.1]);
+            yRight.domain([0, d3.max(data, d => (d.gdpGrowthRate || 0)) * 1.1]);
+
+            // Render x and y axes
+            xAxisGroup.call(d3.axisBottom(x0))
+                .selectAll("text")
+                .attr("transform", "rotate(-45)")
+                .style("text-anchor", "end");
+
+            yAxisGroup.call(d3.axisLeft(y));
+            yRightAxisGroup.call(d3.axisRight(yRight));
+
+            // Create or update bar groups
+            const bars = svg.selectAll(".bar-group")
+                .data(data, d => d.country);
+
+            const barGroups = bars.enter()
+                .append("g")
+                .attr("class", "bar-group")
+                .merge(bars) // Merge to handle updates
+                .attr("transform", d => `translate(${x0(d.country)},0)`);
+
+            // Update or create bars within each group
+            const rects = barGroups.selectAll("rect")
+                .data(d => [
+                    { key: "Tourists", value: d.tourists, scale: y },
+                    { key: "GDP Growth Rate", value: d.gdpGrowthRate, scale: yRight },
+                ]);
+
+            // Enter new bars
+            rects.enter()
+                .append("rect")
+                .merge(rects) // Merge for updates
+                .attr("x", d => x1(d.key)) // Position within the group
+                .attr("y", d => d.value !== null ? d.scale(d.value) : height) // Start at bottom if no data
+                .attr("width", x1.bandwidth()) // Width based on subgroup scale
+                .attr("height", d => d.value !== null ? Math.max(height - d.scale(d.value), 0) : 0) // Height 0 if no data
+                .attr("fill", d => d.value !== null ? color(d.key) : "none") // No fill for missing data
+                .on("mouseover", function (event, d) {
+                    if (d.value !== null) {
+                        tooltip.style("opacity", 1)
+                            .html(`${d.key}: ${d.value.toFixed(2)}`) // add the country and year selected (?) here
+                            .style("left", (event.pageX + 10) + "px")
+                            .style("top", (event.pageY - 10) + "px");
+                    }
+                })
+                .on("mouseout", function () {
+                    tooltip.style("opacity", 0);
+                });
+
+            // Remove bars no longer needed
+            rects.exit().remove();
+
+            // Remove bar groups no longer needed
+            bars.exit().remove();
+        }
+
+
+
+        yearSlider.on("input", async function () {
+            const year = this.value;
+            selectedYearText.text(year);
+
+            const selectedCountries = Array.from(countrySelector.property("selectedOptions"), d => d.value);
+            const data = filterData(await loadData(), selectedCountries, year);
+            updateChart(data);
+        });
+
+        countrySelector.on("change", async function () {
+            const year = yearSlider.property("value");
+
+            const selectedCountries = Array.from(countrySelector.property("selectedOptions"), d => d.value);
+            const data = filterData(await loadData(), selectedCountries, year);
+            updateChart(data);
+        });
+
+        loadData().then(data => {
+            const initialYear = yearSlider.property("value");
+            selectedYearText.text(initialYear);
+            const initialCountries = Array.from(countrySelector.property("selectedOptions"), d => d.value);
+            const initialData = filterData(data, initialCountries, initialYear);
+            updateChart(initialData);
+        });
+    </script>
+</body>
+</html>
