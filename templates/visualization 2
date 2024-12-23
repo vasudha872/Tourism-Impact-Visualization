@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tourism Revenue Over Time</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        .x-label, .y-label { font-size: 14px; font-weight: bold; }
+
+        #chart {
+            margin-bottom: 20px;
+        }
+
+        input[type="range"] {
+            width: 80%;
+        }
+
+        .legend {
+            font-size: 12px;
+        }
+
+        .legend rect {
+            width: 20px;
+            height: 10px;
+            margin-right: 5px;
+        }
+
+        select {
+            width: 300px;
+            height: 120px;
+        }
+    </style>
+</head>
+<body>
+    <h2>Tourism Revenue Per Year by Countries</h2>
+    <div style="text-align: center;margin-bottom: 10px;">
+    <div style="margin-bottom: 5px;">
+        <label for="countryFilter">Select Countries: </label>
+    </div>
+        <select id="countryFilter" multiple>
+            <!-- Country options will be populated here -->
+        </select>
+    </div>
+    
+    <div id="chart"></div>
+    <div style="text-align: center;"><input type="range" id="yearSlider" min="1999" max="2019" step="1" value="1999">
+        <p>Years: <span id="startYear">1999</span> to <span id="endYear">2020</span></p></div>
+    
+    <script>
+        const margin = { top: 40, right: 120, bottom: 60, left: 80 };
+        const width = 650 - margin.left - margin.right;
+        const height = 500 - margin.top - margin.bottom;
+
+        const svg = d3.select("#chart")
+            .append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform", `translate(${margin.left},${margin.top})`);
+
+        // Define scales
+        const xScale = d3.scaleLinear().range([0, width]);
+        const yScale = d3.scaleLinear().range([height, 0]);
+        const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+
+        // Line generator
+        const line = d3.line()
+            .x(d => xScale(d.Year))
+            .y(d => yScale(d.Revenue));
+
+        d3.csv("___OECD_1999_2020.csv").then(data => {
+            // Parse data
+            const parsedData = [];
+            data.forEach(row => {
+                const year = +row.Year;
+                Object.keys(row).forEach(country => {
+                    if (country !== "Year" && row[country]) {
+                        parsedData.push({ Year: year, Country: country, Revenue: +row[country] });
+                    }
+                });
+            });
+
+            const countries = Array.from(new Set(parsedData.map(d => d.Country)));
+            const groupedData = d3.group(parsedData, d => d.Country);
+
+            // Set initial domains
+            xScale.domain([1999, 2020]);
+            yScale.domain([0, d3.max(parsedData, d => d.Revenue)]);
+
+            // Add axes
+            svg.append("g")
+                .attr("class", "x-axis")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(xScale).tickFormat(d3.format("d")));
+
+            svg.append("g")
+                .attr("class", "y-axis")
+                .call(d3.axisLeft(yScale));
+
+            // Add axis labels
+            svg.append("text")
+                .attr("class", "x-label")
+                .attr("text-anchor", "middle")
+                .attr("x", width / 2)
+                .attr("y", height + margin.bottom - 10)
+                .text("Year");
+
+            svg.append("text")
+                .attr("class", "y-label")
+                .attr("text-anchor", "middle")
+                .attr("x", -height / 2)
+                .attr("y", -margin.left + 15)
+                .attr("transform", "rotate(-90)")
+                .text("Tourism Revenue (in millions)");
+
+            // Draw initial lines
+            function drawLines(data) {
+                svg.selectAll(".line").remove(); // Remove old lines
+                svg.selectAll(".line")
+                    .data(data)
+                    .join("path")
+                    .attr("class", "line")
+                    .attr("fill", "none")
+                    .attr("stroke", d => colorScale(d[0]))
+                    .attr("stroke-width", 2)
+                    .attr("d", d => line(d[1]));
+            }
+
+            drawLines(groupedData);
+
+            // Add legend
+            const legend = svg.append("g")
+                .attr("class", "legend")
+                .attr("transform", `translate(${width + 20}, 0)`);
+
+            countries.forEach((country, i) => {
+                const legendRow = legend.append("g")
+                    .attr("transform", `translate(0, ${i * 20})`);
+
+                legendRow.append("rect")
+                    .attr("width", 20)
+                    .attr("height", 10)
+                    .attr("fill", colorScale(country));
+
+                legendRow.append("text")
+                    .attr("x", 25)
+                    .attr("y", 10)
+                    .text(country)
+                    .attr("text-anchor", "start");
+            });
+
+            // Populate country filter
+            const countrySelect = d3.select("#countryFilter");
+            countries.forEach(country => {
+                countrySelect.append("option")
+                    .attr("value", country)
+                    .text(country);
+            });
+
+            // Slider interaction
+            const slider = d3.select("#yearSlider");
+            const startYearLabel = d3.select("#startYear");
+            const endYearLabel = d3.select("#endYear");
+
+            slider.on("input", function () {
+                const selectedYear = +this.value;
+                startYearLabel.text(selectedYear);
+
+                // Filter data to include only years >= selectedYear
+                const filteredData = parsedData.filter(d => d.Year >= selectedYear);
+                const groupedFiltered = d3.group(filteredData, d => d.Country);
+
+                // Update xScale domain
+                xScale.domain([selectedYear, 2020]);
+
+                // Update lines
+                drawLines(groupedFiltered);
+
+                // Update x-axis
+                svg.select(".x-axis").call(d3.axisBottom(xScale).tickFormat(d3.format("d")));
+            });
+
+            // Country filter interaction
+            countrySelect.on("change", function () {
+                const selectedCountries = Array.from(this.selectedOptions).map(option => option.value);
+                const filteredData = parsedData.filter(d => selectedCountries.includes(d.Country));
+                const groupedFiltered = d3.group(filteredData, d => d.Country);
+
+                // Update lines
+                drawLines(groupedFiltered);
+            });
+        }).catch(error => {
+            console.error("Error loading the CSV file:", error);
+        });
+    </script>
+</body>
+</html>
