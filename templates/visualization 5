@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Employment in Tourism Industries</title>
+    <style>
+                .axis-label { font-size: 14px; font-weight: bold; }
+
+        .tooltip {
+            position: absolute;
+            background: #f9f9f9;
+            border: 1px solid #ccc;
+            padding: 10px;
+            border-radius: 5px;
+            pointer-events: none;
+            font-size: 16px;
+            color: black;
+        }
+        .bar {
+            stroke: white;
+            stroke-width: 1px;
+        }
+        .legend {
+            margin: 10px 0;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+        }
+        #yearSlider {
+            width: 80%;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Employment in Tourism Industries Per 1,000 People</h2>
+        <label for="countryDropdown"><b>Select Country:</b></label>
+        <select id="countryDropdown">
+            <option value="None">None</option>
+        </select>
+        <div id="chart"></div>
+
+        <div class="slider-container">
+            <label for="yearSlider" style="position: relative; bottom: 5px;">Select Year:</label>
+            <input id="yearSlider" type="range" min="1995" max="2022" value="2022">
+            <span style="position: relative; bottom: 5px;"id="yearDisplay">2022</span>
+        </div>
+
+        <div class="legend" id="legend"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.7.0/d3.min.js"></script>
+    <script>
+        const defaultYear = 2022;
+        const width = 650;
+        const height = 500;
+        const margin = { top: 20, right: 20, bottom: 60, left: 60 };
+        const chartWidth = width - margin.left - margin.right;
+        const chartHeight = height - margin.top - margin.bottom;
+
+        const svg = d3.select("#chart")
+            .append("svg")
+            .attr("width", width)
+            .attr("height", height);
+
+        const chartGroup = svg.append("g")
+            .attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+        const xScale = d3.scaleBand().range([0, chartWidth]).padding(0.2);
+        const yScale = d3.scaleLinear().range([chartHeight, 0]);
+
+        const bottomAxis = d3.axisBottom(xScale);
+        const leftAxis = d3.axisLeft(yScale).ticks(10);
+
+        chartGroup.append("g").attr("class", "x-axis").attr("transform", `translate(0, ${chartHeight})`);
+        chartGroup.append("g").attr("class", "y-axis");
+
+        const tooltip = d3.select("body")
+            .append("div")
+            .attr("class", "tooltip")
+            .style("opacity", 0);
+
+        const countryDropdown = document.getElementById("countryDropdown");
+
+        chartGroup.append("text")
+    .attr("class", "axis-label")
+    .attr("x", chartWidth / 2)
+    .attr("y", chartHeight + margin.bottom - 10)
+    .style("text-anchor", "middle")
+    .text("Country");
+
+    
+
+            chartGroup.append("text")
+                .attr("class", "axis-label")
+                .attr("text-anchor", "middle")
+                .attr("x", -height / 2)
+                .attr("y", -margin.left + 15)
+                .attr("transform", "rotate(-90)")
+                .text("Employment (Per 1000 people)");
+
+        // Populate dropdown with all countries
+        function populateDropdown(data) {
+            const countries = Array.from(new Set(data.map(d => d.Entity)));
+            countries.sort();
+            countries.forEach(country => {
+                const option = document.createElement("option");
+                option.value = country;
+                option.textContent = country;
+                countryDropdown.appendChild(option);
+            });
+        }
+
+        // Function to get top 5 countries for a given year
+        function getTop5Countries(data, year) {
+            const filteredData = data.filter(d => +d.Year === +year);
+            return filteredData
+                .sort((a, b) => b['Total employment in tourism industries per 1,000 people'] - a['Total employment in tourism industries per 1,000 people'])
+                .slice(0, 5);
+        }
+
+        // Function to get data for the selected country
+        function getSelectedCountryData(data, year, selectedCountry) {
+            return data.filter(d => +d.Year === +year && d.Entity === selectedCountry);
+        }
+
+        // Function to update the chart
+        function updateChart(data, year, selectedCountry = "None") {
+            let filteredData = getTop5Countries(data, year);
+
+            if (selectedCountry !== "None") {
+                const selectedCountryData = getSelectedCountryData(data, year, selectedCountry);
+
+                if (!filteredData.some(d => d.Entity === selectedCountry)) {
+                    filteredData = [...filteredData, ...selectedCountryData];
+                }
+            }
+
+            xScale.domain(filteredData.map(d => d.Entity));
+            yScale.domain([0, d3.max(filteredData, d => +d['Total employment in tourism industries per 1,000 people'])]);
+
+            const bars = chartGroup.selectAll(".bar").data(filteredData);
+
+            // Add x-axis label
+
+            bars.enter()
+                .append("rect")
+                .merge(bars)
+                .attr("class", "bar")
+                .attr("x", d => xScale(d.Entity))
+                .attr("y", d => yScale(+d['Total employment in tourism industries per 1,000 people']))
+                .attr("width", xScale.bandwidth())
+                .attr("height", d => chartHeight - yScale(+d['Total employment in tourism industries per 1,000 people']))
+                .style("fill", (d, i) => d3.schemeCategory10[i % 10])
+                .on("mouseover", (event, d) => {
+                    tooltip.style("opacity", 1)
+                        .html(`<strong>${d.Entity} (${d.Year})</strong><br>Employment: ${(+d['Total employment in tourism industries per 1,000 people']).toFixed(2)}`)
+                        .style("left", `${event.pageX + 10}px`)
+                        .style("top", `${event.pageY - 30}px`);
+                })
+                .on("mouseout", () => tooltip.style("opacity", 0));
+
+            bars.exit().remove();
+
+            chartGroup.select(".x-axis").call(bottomAxis);
+            chartGroup.select(".y-axis").call(leftAxis);
+        }
+
+        // Load data and initialize
+        d3.csv("number-of-individuals-employed-in-tourism-related-industries-per-1000-people.csv").then(data => {
+            data.forEach(d => {
+                d['Total employment in tourism industries per 1,000 people'] = +d['Total employment in tourism industries per 1,000 people'];
+                d.Year = +d.Year;
+            });
+
+            populateDropdown(data);
+            updateChart(data, defaultYear);
+
+            // Event listener for the year slider
+            document.getElementById("yearSlider").addEventListener("input", function () {
+                const year = this.value;
+                document.getElementById("yearDisplay").textContent = year;
+                updateChart(data, +year, countryDropdown.value);
+            });
+
+            // Event listener for the dropdown
+            countryDropdown.addEventListener("change", function () {
+                const selectedCountry = this.value;
+                updateChart(data, document.getElementById("yearSlider").value, selectedCountry);
+            });
+        });
+    </script>
+</body>
+</html>
