@@ -1,1 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Graph 1] Tourism Share of GDP Map</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    #map {
+      margin: 0 auto;
+      text-align: center;
+    }
+    #tooltip {
+      position: absolute;
+      background: white;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      opacity: 0;
+      pointer-events: none;
+      font-family: Arial, sans-serif;
+      font-size: 12px;
+    }
+    #slider {
+      width: 60%;
+    }
+    #slider-container {
+      width: 100%;
+      text-align: center;
+      margin-top: -100px; /* Adjust the slider closer to the map */
+    }
+  </style>
+</head>
+<body>
+  <div style="text-align: center;">
+  <h1>Tourism as a Percentage of Total GDP</h1>
+</div>
+  <div id="map"></div>
+  <div id="slider-container">
+    <input type="range" id="slider" min="2008" max="2020" value="2020" step="1">
+    <div style="text-align: center;"><label for="slider">Year: <span id="yearLabel">2020</span></label></div>
+  </div>
+  
+  <div id="tooltip"></div>
+  
+  <script>
+    // Set dimensions for the map
+    const width = 960;
+    const height = 600;
+
+    // Create an SVG container
+    const svg = d3.select("#map")
+      .append("svg")
+      .attr("width", width)
+      .attr("height", height);
+
+    // Define a map projection
+    const projection = d3.geoMercator()
+      .scale(150)
+      .translate([width / 2, height / 2]);
+
+    // Create a path generator
+    const path = d3.geoPath().projection(projection);
+
+    // Define a color scale
+    const colorScale = d3.scaleSequential(d3.interpolateBlues)
+      .domain([0, 10]); // Assuming data ranges from 0% to 10% (adjust if necessary)
+
+    let geoData, tourismData;
+
+    // Load GeoJSON and CSV data
+    Promise.all([
+      d3.json("/Data_Vis1/tourism-gdp-proportion-of-total-gdp.metadata.json"), // Replace with your GeoJSON file
+      d3.csv("/Data_Vis1/tourism-gdp-proportion-of-total-gdp.csv")    // Replace with your CSV file
+    ]).then(([geo, tourism]) => {
+      geoData = geo;
+      tourismData = tourism;
+      drawMap("2020"); // Initial map for the year 2020
+    });
+
+    // Function to draw the map based on the selected year
+    function drawMap(selectedYear) {
+      const dataMap = new Map();
+      tourismData.forEach(d => {
+        if (d.Year === selectedYear) { // Filter for the selected year
+          dataMap.set(d.Code, +d["GDP from tourism as a share of total GDP"]);
+        }
+      });
+
+      // Attach data to GeoJSON features
+      geoData.features.forEach(feature => {
+        const countryCodeAlpha2 = feature.id;  // GeoJSON uses alpha-2 codes
+        const countryCodeAlpha3 = alpha2ToAlpha3[countryCodeAlpha2];  // Convert to alpha-3
+
+        const tourismShare = dataMap.get(countryCodeAlpha3);  // Use alpha-3 code from the CSV
+
+        // Attach the tourism share data
+        feature.properties.tourismShare = tourismShare !== undefined ? tourismShare : null;
+      });
+
+      // Draw the map
+      svg.selectAll("path")
+        .data(geoData.features)
+        .join("path")
+        .attr("d", path)
+        .attr("fill", d => {
+          const tourismShare = d.properties.tourismShare;
+          return tourismShare !== null ? colorScale(tourismShare) : "#ccc"; // Gray for missing data
+        })
+        .attr("stroke", "#333")
+        .on("mouseover", (event, d) => {
+          const props = d.properties;
+          d3.select("#tooltip")
+            .style("left", `${event.pageX + 5}px`)
+            .style("top", `${event.pageY + 5}px`)
+            .style("opacity", 1)
+            .html(`
+              <strong>${props.name || "Unknown"}</strong><br>
+              Tourism Share of GDP: ${
+                props.tourismShare !== null ? props.tourismShare.toFixed(2) + "%" : "No Data"
+              }
+            `);
+        })
+        .on("mouseout", () => {
+          d3.select("#tooltip").style("opacity", 0);
+        });
+    }
+
+    // Update the map when the slider value changes
+    d3.select("#slider").on("input", function() {
+      const selectedYear = this.value;
+      d3.select("#yearLabel").text(selectedYear); // Update label
+      drawMap(selectedYear); // Redraw map with the new year
+    });
+
+    // Country code mapping from Alpha-2 to Alpha-3
+    const alpha2ToAlpha3 = {
+      'AL': 'ALB', 'DZ': 'DZA', 'AG': 'ATG', 'AR': 'ARG', 'AW': 'ABW', 
+      'AU': 'AUS', 'AT': 'AUT', 'AZ': 'AZE', 'BS': 'BHS', 'BH': 'BHR', 
+      'BD': 'BGD', 'BY': 'BLR', 'BE': 'BEL', 'BM': 'BMU', 'BT': 'BTN', 
+      'BW': 'BWA', 'BN': 'BRN', 'CM': 'CMR', 'CA': 'CAN', 'CL': 'CHL', 
+      'CO': 'COL', 'CR': 'CRI', 'CI': 'CIV', 'HR': 'HRV', 'CZ': 'CZE', 
+      'DK': 'DNK', 'EC': 'ECU', 'EG': 'EGY', 'SV': 'SLV', 'GQ': 'GNQ', 
+      'EE': 'EST', 'SZ': 'SWZ', 'FJ': 'FJI', 'FI': 'FIN', 'FR': 'FRA', 
+      'PF': 'PYF', 'DE': 'DEU', 'GR': 'GRC', 'GU': 'GUM', 'GN': 'GIN', 
+      'GY': 'GUY', 'HN': 'HND', 'HK': 'HKG', 'HU': 'HUN', 'IS': 'ISL', 
+      'IN': 'IND', 'ID': 'IDN', 'IE': 'IRL', 'IL': 'ISR', 'IT': 'ITA', 
+      'JM': 'JAM', 'JP': 'JPN', 'JO': 'JOR', 'KZ': 'KAZ', 'KI': 'KIR', 
+      'LV': 'LVA', 'LB': 'LBN', 'LT': 'LTU', 'LU': 'LUX', 'MO': 'MAC', 
+      'MW': 'MWI', 'MY': 'MYS', 'MT': 'MLT', 'MH': 'MHL', 'MQ': 'MTQ', 
+      'MU': 'MUS', 'MX': 'MEX', 'FM': 'FSM', 'MD': 'MDA', 'MN': 'MNG', 
+      'ME': 'MNE', 'MS': 'MSR', 'MA': 'MAR', 'MZ': 'MOZ', 'NA': 'NAM', 
+      'NP': 'NPL', 'NL': 'NLD', 'NZ': 'NZL', 'NG': 'NGA', 'MK': 'MKD', 
+      'NO': 'NOR', 'OM': 'OMN', 'PW': 'PLW', 'PS': 'PSE', 'PA': 'PAN', 
+      'PY': 'PRY', 'PE': 'PER', 'PH': 'PHL', 'PL': 'POL', 'PT': 'PRT', 
+      'PR': 'PRI', 'QA': 'QAT', 'RE': 'REU', 'RO': 'ROU', 'RU': 'RUS', 
+      'RW': 'RWA', 'LC': 'LCA', 'SA': 'SAU', 'SL': 'SLE', 'SG': 'SGP', 
+      'SK': 'SVK', 'SI': 'SVN', 'ZA': 'ZAF', 'ES': 'ESP', 'LK': 'LKA', 
+      'SE': 'SWE', 'CH': 'CHE', 'TJ': 'TJK', 'TH': 'THA', 'TN': 'TUN', 
+      'UG': 'UGA', 'AE': 'ARE', 'GB': 'GBR', 'US': 'USA', 'UY': 'URY', 
+      'VN': 'VNM'
+    };
+  </script>
+</body>
+</html>
 
