@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tourist Ratios of Inbound to Outbound</title>
+    <style>
+        .axis-label { font-size: 14px; font-weight: bold; }
+        .tooltip {
+            position: absolute;
+            background: #f9f9f9;
+            border: 1px solid #ccc;
+            padding: 10px;
+            border-radius: 5px;
+            pointer-events: none;
+            font-size: 14px;
+            color: black;
+        }
+        input[type="range"] {
+            width: 80%;
+        }
+        .slider-container {
+            margin: 20px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="chart-container">
+            <h2>Ratio of Inbound to Outbound Tourist Trips</h2>
+
+            <!-- Dropdown for countries -->
+            <label for="country"><b>Select Country:</b></label>
+            <select id="country">
+                <option value="none" selected>None</option>
+            </select>
+
+            <!-- Chart Container -->
+            <div id="chart"></div>
+
+            
+            <div class="slider-container">
+                <label for="yearSlider" style="position: relative; bottom: 5px;">Select Year:</label>
+                <input id="yearSlider" type="range" min="1995" max="2022" value="2022">
+                <span style="position: relative; bottom: 5px;"id="yearDisplay">2022</span>
+            </div>
+
+        <!-- Legend 
+        <div class="legend" id="legend">
+            <h3>Country Color Palette</h3>
+        </div>
+    </div>-->
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.7.0/d3.min.js"></script>
+    <script>
+
+        const tooltip = d3.select("body")
+            .append("div")
+            .attr("class", "tooltip")
+            .style("opacity", 0)
+            .style("position", "absolute")
+            .style("background", "#f9f9f9")
+            .style("border", "1px solid #ccc")
+            .style("padding", "10px")
+            .style("border-radius", "5px")
+            .style("pointer-events", "none")
+            .style("font-size", "14px");
+
+            
+        // Load the CSV data
+        d3.csv('ratio-of-inbound-to-outbound-tourists.csv').then(data => {
+
+            const parsedData = data.map(d => ({
+                ...d,
+                Year: +d.Year,
+                'Ratio of inbound to outbound tourist trips': +d['Ratio of inbound to outbound tourist trips']
+            }));
+
+            const allCountries = [...new Set(parsedData.map(d => d.Entity))].sort();
+            const topCountries = Array.from(new Set(parsedData
+                .filter(d => !isNaN(d['Ratio of inbound to outbound tourist trips']))
+                .sort((a, b) => b['Ratio of inbound to outbound tourist trips'] - a['Ratio of inbound to outbound tourist trips'])
+                .slice(0, 5)
+                .map(d => d.Entity)));
+
+            const defaultYear = 2022;
+            let selectedCountry = null;
+
+            const width = 630;
+            const height = 500;
+            const margin = { top: 20, right: 20, bottom: 60, left: 60 };
+            const chartWidth = width - margin.left - margin.right;
+            const chartHeight = height - margin.top - margin.bottom;
+
+            const svg = d3.select("#chart")
+                .append("svg")
+                .attr("width", width)
+                .attr("height", height);
+
+            const chartGroup = svg.append("g")
+                .attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+            const xScale = d3.scaleLinear().range([0, chartWidth]);
+            const yScale = d3.scaleLinear().range([chartHeight, 0]);
+
+            const bottomAxis = d3.axisBottom(xScale).ticks(10).tickFormat(d3.format("d"));
+            const leftAxis = d3.axisLeft(yScale).ticks(10);
+
+            // Add x-axis label
+chartGroup.append("text")
+    .attr("class", "axis-label")
+    .attr("x", chartWidth / 2)
+    .attr("y", chartHeight + margin.bottom - 10)
+    .style("text-anchor", "middle")
+    .text("Year");
+
+    chartGroup.append("g")
+                .attr("class", "y-axis")
+                .call(d3.axisLeft(yScale));
+
+            chartGroup.append("text")
+                .attr("class", "axis-label")
+                .attr("text-anchor", "middle")
+                .attr("x", -height / 2)
+                .attr("y", -margin.left + 15)
+                .attr("transform", "rotate(-90)")
+                .text("Ratio");
+
+
+            chartGroup.append("g").attr("class", "x-axis").attr("transform", `translate(0, ${chartHeight})`);
+            chartGroup.append("g").attr("class", "y-axis");
+
+            const lineGenerator = d3.line()
+                .x(d => xScale(d.Year))
+                .y(d => yScale(d['Ratio of inbound to outbound tourist trips']));
+
+            const legendContainer = d3.select("#legend");
+
+            const tooltip = d3.select("body")
+                .append("div")
+                .attr("class", "tooltip")
+                .style("opacity", 0);
+
+            function updateChart(selectedCountry, year) {
+                const activeCountries = selectedCountry
+                    ? [...new Set([...topCountries, selectedCountry])]
+                    : topCountries;
+
+                const filteredData = parsedData.filter(d => activeCountries.includes(d.Entity) && d.Year <= year);
+
+                xScale.domain(d3.extent(filteredData, d => d.Year));
+                yScale.domain([0, Math.ceil(d3.max(filteredData, d => d['Ratio of inbound to outbound tourist trips']))]);
+
+                const groupedData = d3.group(filteredData, d => d.Entity);
+
+                const lines = chartGroup.selectAll(".line").data(groupedData);
+
+                // lines.enter()
+                //     .append("path")
+                //     .merge(lines)
+                //     .attr("class", "line")
+                //     .attr("d", ([, values]) => lineGenerator(values))
+                //     .style("stroke", ([entity]) => d3.schemeCategory10[allCountries.indexOf(entity) % 10]) // Set the line color
+                //     .style("fill", "none"); // Remove the area fill
+
+                lines.enter()
+                    .append("path")
+                    .merge(lines)
+                    .attr("class", "line")
+                    .attr("d", ([, values]) => lineGenerator(values))
+                    .style("stroke", ([entity]) => d3.schemeCategory10[allCountries.indexOf(entity) % 10])
+                    .style("fill", "none")
+                    .on("mouseover", (event, [entity]) => {
+                        tooltip.style("opacity", 1)
+                            .html(`<strong>Country:</strong> ${entity}`);
+                    })
+                    .on("mousemove", (event) => {
+                        tooltip.style("left", `${event.pageX + 10}px`)
+                            .style("top", `${event.pageY - 30}px`);
+                    })
+                    .on("mouseout", () => {
+                        tooltip.style("opacity", 0);
+                    });
+
+
+                lines.exit().remove();
+
+                const dots = chartGroup.selectAll(".dot").data(filteredData);
+
+                dots.enter()
+                    .append("circle")
+                    .merge(dots)
+                    .attr("class", "dot")
+                    .attr("cx", d => xScale(d.Year))
+                    .attr("cy", d => yScale(d['Ratio of inbound to outbound tourist trips']))
+                    .attr("r", 4)
+                    .style("fill", d => d3.schemeCategory10[allCountries.indexOf(d.Entity) % 10]);
+
+                dots.exit().remove();
+
+                chartGroup.select(".x-axis").call(bottomAxis);
+                chartGroup.select(".y-axis").call(leftAxis);
+
+                const legendItems = legendContainer.selectAll(".legend-item").data(allCountries);
+
+                legendItems.enter()
+                    .append("div")
+                    .merge(legendItems)
+                    .html(d => `<span style="color:${d3.schemeCategory10[allCountries.indexOf(d) % 10]}">&#9679;</span> ${d}`);
+            }
+
+            document.getElementById("country").addEventListener("change", function () {
+                selectedCountry = this.value === "none" ? null : this.value;
+                updateChart(selectedCountry, document.getElementById("yearSlider").value);
+            });
+
+            document.getElementById("yearSlider").addEventListener("input", function () {
+                document.getElementById("yearDisplay").textContent = this.value;
+                updateChart(selectedCountry, this.value);
+            });
+
+            allCountries.forEach(country => {
+                const option = document.createElement("option");
+                option.value = country;
+                option.textContent = country;
+                document.getElementById("country").appendChild(option);
+            });
+
+            updateChart(null, defaultYear);
+        });
+    </script>
+</body>
+</html>
