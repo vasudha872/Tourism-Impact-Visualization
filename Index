@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <style>
+        .main {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        body {
+        background-color: #f4f4f9;
+        }
+
+        .dashboard-container {
+            display: grid;
+            grid-template-rows: 690px 850px 700px;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            width: 90%;
+            height: 90%;
+            background: #fff;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        .geospatial-map {
+            grid-column: 1 / 3;
+            grid-row: 1;
+        }
+
+        .visualization {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            overflow: hidden;
+            background-color: #fafafa;
+            display: flex;
+        }
+
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .title {
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 3rem;
+            color: #333;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="title">Impacts of Tourism</div>
+    <div class="main">
+    <div class="dashboard-container">
+        <!-- Geospatial Map 1-->
+        <div class="geospatial-map visualization">
+            <iframe src="/Data_Vis1/Visualization_Graph1.html"></iframe>
+        </div>
+
+        <!-- Visualization 2 -->
+        <div class="visualization">
+            <iframe src="/Data_Vis2/index.html"></iframe>
+        </div>
+
+        <!-- Visualization 3 -->
+        <div class="visualization">
+            <iframe src="/Data_Vis3/Visualization3v3.html"></iframe>
+        </div>
+
+        <!-- Visualization 4 -->
+        <div class="visualization">
+            <iframe src="/Data_Vis4/Visualization4.html"></iframe>
+        </div>
+
+        <!-- Visualization 5 -->
+        <div class="visualization">
+            <iframe src="/Data_Vis5/Visualization5.html"></iframe>
+        </div>
+    </div>
+</div>
+</body>
+</html>
